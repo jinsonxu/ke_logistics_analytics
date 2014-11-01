@@ -9,9 +9,9 @@ include('libraries/krumo/class.krumo.php');
 
 
 // config info
-$filePath= 'data/solution_part2b.json';
-$outputFilePath = 'data/solution_part2b.csv';
-$jsonOutputFilePath = 'data/solution_part2b_mapbox.json';
+$filePath= 'data/solution_part3.json';
+$outputFilePath = 'data/solution_part3.csv';
+$jsonOutputFilePath = 'data/solution_part3_mapbox.json';
 
 $markerColours = array('Driver_1' => '#AA3939', 'Driver_2' => '#AA6C39', 'Driver_3' => '#AA7F39', 
 						'Driver_4' => '#AA8B39','Driver_5' => '#AA9E39','Driver_6' => '#97A637', 
@@ -44,6 +44,7 @@ krumo($working);
 
 $solutionArray = get_object_vars($working->output->solution);
 //krumo($solutionArray);
+/*
 $csv = "driver,location_id,location_name,latitude, longitude, arrival_time, marker-color\r\n";
 foreach($solutionArray as $key => $val) {
 	foreach($val as $stop) {
@@ -56,32 +57,62 @@ foreach($solutionArray as $key => $val) {
 					.','. $markerColours[$key]."\r\n";	
 	}
 }
+*/
+//krumo($csv);
+//file_put_contents($outputFilePath, $csv);
+//print 'Written to '. $outputFilePath;
 
-krumo($csv);
-file_put_contents($outputFilePath, $csv);
-print 'Written to '. $outputFilePath;
 
-
-$geoJson = '';
-$csvArray = explode("\r\n", trim($csv));
+$geoJson = new stdClass();
+$geoJson->features = array();
+//$csvArray = explode("\r\n", trim($csv));
 $x = 0;
-foreach($csvArray as $line) {
-	if($x>0) {
-		$cols = explode(',', $line);
-		$pointData = new stdClass();
-		$pointData->type='Feature';
+foreach($solutionArray as $key => $val) {
+	$k = 0;
+	$driverCoordinates = array();
+	foreach($val as $stop) {
+		$marker = new stdClass();
+		$marker->type='Feature';
+		$markerSymbol = ($stop->location_id=='depot') ? 'warehouse' : 'grocery';
+		$locLookupName = str_replace('Singapore ','', $stop->location_name);
 		
-		$pointData->geometry = (object) array('type'=>'Point', 'coordinates'=> array($cols[3], $cols[4]));
-		$pointData->properties = new stdClass();
-		$pointData->properties->title=$cols[5] . ', ' . $cols[0];
-		$pointData->properties->description=$cols[1] . ', '. $cols[2];
-		$pointData->properties->{'marker-color'}=$cols[6];
-		$geoJson .= json_encode($pointData) . ',';		
+		$coords = array((float) $locations[$locLookupName]['longitude'], (float) $locations[$locLookupName]['latitude']);
+		$marker->geometry = (object) array('type'=>'Point', 'coordinates'=> $coords);
+		
+		//lets also add the coordinates into an array to facilitate polyline creation later
+		array_push($driverCoordinates, $coords);
+		
+		$marker->properties = new stdClass();
+		$marker->properties->id = 'marker_' . strtolower(str_replace(' ','_', $stop->location_name)) . '_' . $x . '_' . $k;
+		$marker->properties->title=$stop->arrival_time . ', ' . $key;
+		$marker->properties->description=$stop->location_id . ', '. $stop->location_name;
+		$marker->properties->{'marker-color'}=$markerColours[$key];
+		$marker->properties->{'marker-symbol'}=$markerSymbol;
+		$marker->properties->{'marker-size'}='small';
+		array_push($geoJson->features, $marker);
+		++$k;
 	}
+	// now for each driver's route, lets add a polyline to roughly show the route sequence.
+	$lineString = new stdClass();
+	$lineString->type = 'Feature';
+	$lineString->geometry = (object) array('type'=> 'LineString', 'coordinates' => $driverCoordinates);
+	$lineString->properties = new stdClass();
+	$lineString->properties->id = 'line_' . $x;
+	$lineString->properties->stroke = $markerColours[$key];
+	$lineString->properties->{'stroke-opacity'} = 0.85;
+	$lineString->properties->{'stroke-width'} = 4;
+	
+	array_push($geoJson->features, $lineString);
+	
 	++$x;
 }
-$geoJson = substr($geoJson, 0, strlen($geoJson)-1);
+//$geoJson = substr($geoJson, 0, strlen($geoJson)-1);
+$geoJson->id = 'jinsonxu.k3a3enhh';
+$geoJson->type = 'FeatureCollection';
 
-file_put_contents($jsonOutputFilePath, $geoJson);
+
+krumo($geoJson);
+
+file_put_contents($jsonOutputFilePath, json_encode($geoJson, JSON_PRETTY_PRINT));
 
 ?>
